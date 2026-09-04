@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Valor local</title>
+  <rect width="64" height="64" rx="16" fill="#18233d" />
+  <rect x="10" y="10" width="44" height="44" rx="14" fill="#f4c84b" stroke="#82d8cf" stroke-width="2" transform="rotate(-4 32 32)" />
+  <path d="M24 20v5m16-5v5M21 29h22M23 25h18a3 3 0 0 1 3 3v11a3 3 0 0 1-3 3H23a3 3 0 0 1-3-3V28a3 3 0 0 1 3-3Z" fill="none" stroke="#18233d" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.4" />
+  <circle cx="50" cy="14" r="4" fill="#ee725e" />
+</svg>

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#18233d" />
+    <meta
+      name="description"
+      content="Panel rápido de cotización del dólar BCV, euro BCV y dólar Binance en Venezuela."
+    />
+    <title>Valor local · Cotización en Venezuela</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="Valor local, inicio">
+          <span class="brand-mark" aria-hidden="true"><span>Bs</span></span>
+          <span class="brand-copy">
+            <strong>valor local</strong>
+            <small>Venezuela, en una mirada</small>
+          </span>
+        </a>
+
+        <div class="topbar-tools">
+          <span class="connection-status" aria-live="polite">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Conectando</span>
+          </span>
+          <span class="topbar-time" id="headerUpdated">—</span>
+          <button class="refresh-button" id="refreshButton" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 11a8.1 8.1 0 0 0-14.7-3.8L4 9m0 0V4m0 5h5M4 13a8.1 8.1 0 0 0 14.7 3.8L20 15m0 0v5m0-5h-5" />
+            </svg>
+            <span>Actualizar</span>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="rates-section" aria-labelledby="ratesTitle">
+          <div class="section-heading rates-heading">
+            <div class="rates-heading-copy">
+              <p class="section-kicker">Cotización del día</p>
+              <h1 id="ratesTitle">Cotizaciones en bolívares</h1>
+            </div>
+            <div class="rates-context" aria-label="Fecha y vigencia BCV">
+              <div class="rates-context-date">
+                <span class="context-dot" aria-hidden="true"></span>
+                <strong id="dateBriefTitle">Cargando fecha…</strong>
+              </div>
+              <div class="rates-context-rule">
+                <span>Vigencia BCV</span>
+                <strong id="effectiveDateLabel">Cargando…</strong>
+              </div>
+              <p id="dateRuleNote">
+                La fecha se ajusta al próximo lunes solo durante el fin de semana.
+              </p>
+            </div>
+            <p class="data-state" id="dataState" aria-live="polite">
+              Consultando DolarApi…
+            </p>
+          </div>
+
+          <div class="rate-grid">
+            <article class="rate-card rate-card--primary" id="usdCard">
+              <div class="card-header">
+                <div class="currency-mark currency-mark--usd" aria-hidden="true">
+                  $
+                </div>
+                <div class="card-title">
+                  <h3>Dólar BCV</h3>
+                  <p>Referencia oficial</p>
+                </div>
+                <span class="source-tag source-tag--dark">BCV</span>
+              </div>
+
+              <div class="value-line">
+                <span class="value-currency">Bs.</span>
+                <span class="rate-value" id="usdValue">—</span>
+              </div>
+              <p class="value-caption">por 1 dólar estadounidense</p>
+
+              <div class="card-footer">
+                <div class="update-copy">
+                  <span>Último dato</span>
+                  <strong id="usdUpdated">—</strong>
+                </div>
+                <span class="card-note" id="usdNote">Promedio BCV</span>
+              </div>
+              <div class="primary-sparkline" id="usdSparkline" aria-hidden="true"></div>
+            </article>
+
+            <article class="rate-card rate-card--paper" id="eurCard">
+              <div class="card-header">
+                <div class="currency-mark currency-mark--eur" aria-hidden="true">
+                  €
+                </div>
+                <div class="card-title">
+                  <h3>Euro BCV</h3>
+                  <p>Referencia oficial</p>
+                </div>
+                <span class="source-tag">BCV</span>
+              </div>
+
+              <div class="value-line">
+                <span class="value-currency">Bs.</span>
+                <span class="rate-value" id="eurValue">—</span>
+              </div>
+              <p class="value-caption">por 1 euro</p>
+
+              <div class="card-footer">
+                <div class="update-copy">
+                  <span>Último dato</span>
+                  <strong id="eurUpdated">—</strong>
+                </div>
+                <span class="card-note" id="eurNote">Promedio BCV</span>
+              </div>
+            </article>
+
+            <article class="rate-card rate-card--parallel" id="parallelCard">
+              <div class="card-header">
+                <div class="currency-mark currency-mark--parallel" aria-hidden="true">
+                  <span></span>
+                </div>
+                <div class="card-title">
+                  <h3>Dólar Binance</h3>
+                  <p>Referencia USDT</p>
+                </div>
+                <a
+                  class="source-tag source-tag--light"
+                  id="parallelSource"
+                  href="https://exchangemonitor.net/venezuela/dolar-binance"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  ExchangeMonitor
+                </a>
+              </div>
+
+              <div class="value-line">
+                <span class="value-currency">Bs.</span>
+                <span class="rate-value" id="parallelValue">—</span>
+              </div>
+              <p class="value-caption">por 1 USDT</p>
+
+              <div class="parallel-orders" aria-label="Precios de compra y venta Binance">
+                <div>
+                  <span>Compra</span>
+                  <strong>Bs. <b id="parallelBuy">—</b></strong>
+                </div>
+                <div>
+                  <span>Venta</span>
+                  <strong>Bs. <b id="parallelSell">—</b></strong>
+                </div>
+              </div>
+
+              <div class="card-footer">
+                <div class="update-copy">
+                  <span>Último dato</span>
+                  <strong id="parallelUpdated">—</strong>
+                </div>
+                <span class="gap-note" id="parallelGap">— vs. BCV</span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="insights-grid" aria-label="Contexto de las cotizaciones">
+          <article class="trend-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="section-kicker">Contexto rápido</p>
+                <h2>El pulso de los últimos días</h2>
+              </div>
+              <span class="panel-period">7 días · BCV</span>
+            </div>
+            <div class="trend-chart" id="trendChart">
+              <div class="chart-loading">Cargando serie histórica…</div>
+            </div>
+            <div class="trend-footer">
+              <span id="trendStart">—</span>
+              <strong id="trendLatest">—</strong>
+              <span id="trendEnd">—</span>
+            </div>
+          </article>
+
+          <aside class="rule-panel">
+            <div class="rule-panel-top">
+              <span class="rule-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 3v18M3 12h18M5.5 5.5l13 13m0-13-13 13" />
+                </svg>
+              </span>
+              <span class="source-tag source-tag--light">Regla de fecha</span>
+            </div>
+            <h2>Fin de semana, sin confusiones.</h2>
+            <p>
+              Viernes conserva su propio monto. Sábado y domingo buscan la
+              cotización del lunes siguiente para dólar y euro BCV.
+            </p>
+            <div class="rule-list">
+              <div class="rule-row">
+                <span>Viernes</span>
+                <strong>toma viernes</strong>
+              </div>
+              <div class="rule-row">
+                <span>Sábado · domingo</span>
+                <strong>toman lunes</strong>
+              </div>
+              <div class="rule-row">
+                <span>Binance</span>
+                <strong>dato disponible</strong>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <span>
+          Fuentes públicas:
+          <a href="https://dolarapi.com/docs/venezuela/" target="_blank" rel="noreferrer">DolarApi</a>
+          ·
+          <a href="https://exchangemonitor.net/venezuela/dolar-binance" target="_blank" rel="noreferrer">ExchangeMonitor</a>
+        </span>
+        <span id="footerMessage">Actualización automática activa</span>
+      </footer>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
