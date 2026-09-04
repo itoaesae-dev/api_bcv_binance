@@ -1,6 +1,10 @@
 const EXCHANGE_URL = "https://exchangemonitor.net/venezuela/dolar-binance";
+const EXCHANGE_API_URL = "https://exchangemonitor.net/api/v1/data/ve";
+const READER_URL = "https://r.jina.ai/http://exchangemonitor.net/venezuela/dolar-binance";
 const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36";
+const REQUEST_TIMEOUT = 8000;
+const CARACAS_OFFSET = "-04:00";
 
 function decodeHtml(value) {
   return String(value ?? "")
@@ -25,6 +29,15 @@ function parseNumber(value) {
 
   const number = Number.parseFloat(cleaned);
   return Number.isFinite(number) ? number : null;
+}
+
+function firstNumber(values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const number = typeof value === "number" ? value : parseNumber(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
 }
 
 function extractFirst(pattern, page) {
@@ -78,6 +91,55 @@ function parsePageDate(description) {
   ).toISOString();
 }
 
+function normalizeDate(value) {
+  if (!value) return null;
+
+  const text = String(value).trim();
+  const localDateMatch = text.match(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/);
+  const date = new Date(
+    localDateMatch ? `${text.replace(" ", "T")}${CARACAS_OFFSET}` : text,
+  );
+
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function getAuthHeader() {
+  const auth = String(process.env.EXCHANGE_MONITOR_AUTH || "").trim();
+  if (auth) return /^Bearer\s/i.test(auth) ? auth : `Bearer ${auth}`;
+
+  const appId = String(process.env.EXCHANGE_MONITOR_APP_ID || "").trim();
+  const apiKey = String(process.env.EXCHANGE_MONITOR_API_KEY || "").trim();
+  return appId && apiKey ? `Bearer ${appId}:${apiKey}` : null;
+}
+
+async function fetchText(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      cache: "no-store",
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        "User-Agent": USER_AGENT,
+        ...(options.headers || {}),
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`${new URL(url).hostname} respondió ${response.status}.`);
+    }
+
+    return response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function parsePage(page) {
   const mainRateText = extractFirst(
     /<div[^>]*class=["'][^"']*history-rate[^"']*["'][^>]*>(.*?)<\/div>/is,
@@ -126,6 +188,141 @@ function parsePage(page) {
   };
 }
 
+function parseApiPayload(payload) {
+  if (!payload?.success) {
+    throw new Error(payload?.message || "ExchangeMonitor rechazó la consulta API.");
+  }
+
+  const records = Array.isArray(payload.data) ? payload.data : [];
+  const record = records.find((item) => item?.id === "ve-binance")
+    || records.find((item) => /binance/i.test(
+      `${item?.id || ""} ${item?.name || ""} ${item?.name_large || ""}`,
+    ));
+
+  if (!record) throw new Error("La API no devolvió el registro de Binance.");
+
+  const compra = firstNumber([record.buy, record.compra]);
+  const venta = firstNumber([record.sell, record.venta]);
+  const promedio = firstNumber([
+    record.rate,
+    record.promedio,
+    record.value,
+    compra !== null && venta !== null ? (compra + venta) / 2 : null,
+    venta,
+    compra,
+  ]);
+
+  if (promedio === null) {
+    throw new Error("El registro de Binance no tiene un monto válido.");
+  }
+
+  return {
+    moneda: "USD",
+    fuente: "binance",
+    nombre: "Dólar Binance",
+    promedio,
+    compra,
+    venta,
+    variacion: firstNumber([record.change_rate, record.variacion]),
+    variacionPorcentaje: firstNumber([record.change_perc, record.variacionPorcentaje]),
+    fechaActualizacion: normalizeDate(record.date || record.fecha || payload.settings?.date)
+      || new Date().toISOString(),
+    sourceUrl: EXCHANGE_URL,
+  };
+}
+
+function parseReaderPage(page) {
+  const buyText = page.match(/(?:^|\n)\s*Compra\s*(?:\n)+\s*Bs\.\s*([0-9.,]+)/i)?.[1];
+  const sellText = page.match(/(?:^|\n)\s*Venta\s*(?:\n)+\s*Bs\.\s*([0-9.,]+)/i)?.[1];
+  const summary = page.match(
+    /Para hoy[\s\S]*?(?=\n\s*##|$)/i,
+  )?.[0] || page;
+  const rateText = summary.match(
+    /precio del d[oó]lar Binance[\s\S]*?se cotiza en\s*([0-9.,]+)\s+USD/i,
+  )?.[1];
+  const promedio = parseNumber(rateText);
+
+  if (promedio === null) {
+    throw new Error("La lectura alternativa no devolvió el precio de Binance.");
+  }
+
+  const changeText = summary.match(
+    /(?:aumento|incremento|disminuci[oó]n|descenso)[\s\S]*?(\d+(?:[.,]\d+)?)%/i,
+  )?.[1];
+  const negativeChange = /disminuci[oó]n|descenso|baj[oó]/i.test(summary);
+
+  return {
+    moneda: "USD",
+    fuente: "binance",
+    nombre: "Dólar Binance",
+    promedio,
+    compra: parseNumber(buyText),
+    venta: parseNumber(sellText),
+    variacion: changeText
+      ? parseNumber(changeText) * (negativeChange ? -1 : 1)
+      : null,
+    variacionPorcentaje: null,
+    fechaActualizacion: parsePageDate(summary) || new Date().toISOString(),
+    sourceUrl: EXCHANGE_URL,
+  };
+}
+
+async function fetchOfficialApi(authHeader) {
+  const url = new URL(EXCHANGE_API_URL);
+  url.searchParams.set("timezone", "America/Caracas");
+  url.searchParams.set("filter", "binance");
+  url.searchParams.set("limit", "10");
+
+  const raw = await fetchText(url.toString(), {
+    headers: {
+      Accept: "application/json",
+      Authorization: authHeader,
+    },
+  });
+  return parseApiPayload(JSON.parse(raw));
+}
+
+async function fetchHtmlPage() {
+  return parsePage(await fetchText(EXCHANGE_URL));
+}
+
+async function fetchReaderPage() {
+  return parseReaderPage(await fetchText(READER_URL, {
+    headers: { Accept: "text/plain" },
+  }));
+}
+
+async function loadBinanceQuote() {
+  const authHeader = getAuthHeader();
+  const failures = [];
+
+  if (authHeader) {
+    try {
+      return await fetchOfficialApi(authHeader);
+    } catch (error) {
+      failures.push(`API oficial: ${error.message}`);
+    }
+  }
+
+  const pageAttempts = [
+    fetchHtmlPage().catch((error) => {
+      throw new Error(`página: ${error.message}`);
+    }),
+    fetchReaderPage().catch((error) => {
+      throw new Error(`lector: ${error.message}`);
+    }),
+  ];
+
+  try {
+    return await Promise.any(pageAttempts);
+  } catch (error) {
+    const errors = error instanceof AggregateError ? error.errors : [error];
+    failures.push(...errors.map((item) => item.message));
+  }
+
+  throw new Error(failures.join(" | ") || "No se pudo consultar Binance.");
+}
+
 module.exports = async function handler(req, res) {
   if (req.method && req.method !== "GET") {
     res.setHeader("Allow", "GET");
@@ -133,18 +330,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(EXCHANGE_URL, {
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-        "User-Agent": USER_AGENT,
-      },
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error(`ExchangeMonitor respondió ${response.status}.`);
-
-    const payload = parsePage(await response.text());
+    const payload = await loadBinanceQuote();
     res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
     return res.status(200).json(payload);
   } catch (error) {
@@ -157,3 +343,5 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.parsePage = parsePage;
+module.exports.parseApiPayload = parseApiPayload;
+module.exports.parseReaderPage = parseReaderPage;
