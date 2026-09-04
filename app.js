@@ -29,8 +29,6 @@ const FALLBACK_QUOTES = {
 
 const dom = {
   refreshButton: document.querySelector("#refreshButton"),
-  statusDot: document.querySelector("#statusDot"),
-  statusText: document.querySelector("#statusText"),
   headerUpdated: document.querySelector("#headerUpdated"),
   dateBriefTitle: document.querySelector("#dateBriefTitle"),
   effectiveDateLabel: document.querySelector("#effectiveDateLabel"),
@@ -323,10 +321,6 @@ async function loadHistory(signal) {
 function setLoadingState(isLoading) {
   dom.refreshButton.disabled = isLoading;
   dom.refreshButton.classList.toggle("is-loading", isLoading);
-  if (isLoading) {
-    dom.statusDot.dataset.state = "loading";
-    dom.statusText.textContent = "Actualizando";
-  }
 }
 
 function renderDatePlan(plan) {
@@ -510,8 +504,6 @@ async function loadDashboard() {
   if (!binanceLive) fallbackLabels.push("Binance");
   const uniqueFallbackLabels = [...new Set(fallbackLabels)];
   const allLive = failures.length === 0 && binanceLive;
-  dom.statusDot.dataset.state = allLive ? "ready" : "error";
-  dom.statusText.textContent = allLive ? "Conectado" : "Respaldo";
   dom.dataState.textContent = allLive
     ? "Datos en vivo · se actualiza cada 10 min"
     : `Sin conexión en ${uniqueFallbackLabels.join(", ")} · mostrando respaldo`;
@@ -527,8 +519,6 @@ async function loadDashboard() {
 
 dom.refreshButton.addEventListener("click", () => {
   loadDashboard().catch(() => {
-    dom.statusDot.dataset.state = "error";
-    dom.statusText.textContent = "Sin conexión";
     dom.dataState.textContent = "No se pudo actualizar. Intenta de nuevo.";
     setLoadingState(false);
   });
@@ -542,8 +532,6 @@ function showToast(message) {
 }
 
 loadDashboard().catch(() => {
-  dom.statusDot.dataset.state = "error";
-  dom.statusText.textContent = "Sin conexión";
   dom.dataState.textContent = "No se pudo consultar la API.";
   setLoadingState(false);
 });
