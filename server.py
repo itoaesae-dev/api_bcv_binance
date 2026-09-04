@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
@@ -23,6 +24,7 @@ PORT = 4173
 EXCHANGE_URL = "https://exchangemonitor.net/venezuela/dolar-binance"
 EXCHANGE_API_URL = "https://exchangemonitor.net/api/v1/data/ve"
 READER_URL = "https://r.jina.ai/http://exchangemonitor.net/venezuela/dolar-binance"
+BINANCE_P2P_URL = "https://www.binance.com/bapi/c2c/v1/public/c2c/agent/quote-price"
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "Chrome/128.0 Safari/537.36"
@@ -241,6 +243,16 @@ def parse_reader_page(page: str) -> dict[str, Any]:
     }
 
 
+def parse_binance_quote(payload: dict[str, Any], trade_type: str) -> float:
+    if not payload.get("success") or not payload.get("data"):
+        raise ValueError(f"Binance P2P rechazó la consulta {trade_type}.")
+
+    price = first_number([payload["data"].get("price")])
+    if price is None:
+        raise ValueError(f"Binance P2P no devolvió precio para {trade_type}.")
+    return price
+
+
 def parse_page_date(description: str | None) -> str | None:
     """Read the UTC timestamp included in ExchangeMonitor's description."""
 
@@ -316,6 +328,28 @@ def fetch_official_api(auth_header: str) -> dict[str, Any]:
     return parse_api_payload(json.loads(raw))
 
 
+def fetch_binance_p2p() -> dict[str, Any]:
+    def fetch_side(trade_type: str) -> float:
+        query = urlencode({"fiat": "VES", "asset": "USDT", "tradeType": trade_type})
+        payload = json.loads(fetch_remote(f"{BINANCE_P2P_URL}?{query}", {"Accept": "application/json"}))
+        return parse_binance_quote(payload, trade_type)
+
+    buy = fetch_side("BUY")
+    sell = fetch_side("SELL")
+    return {
+        "moneda": "USD",
+        "fuente": "binance-p2p",
+        "nombre": "Dólar Binance",
+        "promedio": (buy + sell) / 2,
+        "compra": buy,
+        "venta": sell,
+        "variacion": None,
+        "variacionPorcentaje": None,
+        "fechaActualizacion": datetime.now(timezone.utc).isoformat(),
+        "sourceUrl": "https://p2p.binance.com/",
+    }
+
+
 class DashboardHandler(SimpleHTTPRequestHandler):
     """Serve dashboard files and the same-origin Binance proxy."""
 
@@ -354,6 +388,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
             except Exception as error:
                 failures.append(f"lector: {error}")
+
+            try:
+                self.send_json(200, fetch_binance_p2p())
+                return
+            except Exception as error:
+                failures.append(f"Binance P2P: {error}")
 
             raise RuntimeError(" | ".join(failures))
         except Exception as error:  # pragma: no cover - network-dependent path

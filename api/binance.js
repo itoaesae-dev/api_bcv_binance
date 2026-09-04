@@ -1,6 +1,7 @@
 const EXCHANGE_URL = "https://exchangemonitor.net/venezuela/dolar-binance";
 const EXCHANGE_API_URL = "https://exchangemonitor.net/api/v1/data/ve";
 const READER_URL = "https://r.jina.ai/http://exchangemonitor.net/venezuela/dolar-binance";
+const BINANCE_P2P_URL = "https://www.binance.com/bapi/c2c/v1/public/c2c/agent/quote-price";
 const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36";
 const REQUEST_TIMEOUT = 8000;
@@ -267,6 +268,16 @@ function parseReaderPage(page) {
   };
 }
 
+function parseBinanceQuote(payload, tradeType) {
+  if (!payload?.success || !payload.data) {
+    throw new Error(`Binance P2P rechazó la consulta ${tradeType}.`);
+  }
+
+  const price = firstNumber([payload.data.price]);
+  if (price === null) throw new Error(`Binance P2P no devolvió precio para ${tradeType}.`);
+  return price;
+}
+
 async function fetchOfficialApi(authHeader) {
   const url = new URL(EXCHANGE_API_URL);
   url.searchParams.set("timezone", "America/Caracas");
@@ -290,6 +301,37 @@ async function fetchReaderPage() {
   return parseReaderPage(await fetchText(READER_URL, {
     headers: { Accept: "text/plain" },
   }));
+}
+
+async function fetchBinanceP2P() {
+  const fetchSide = async (tradeType) => {
+    const url = new URL(BINANCE_P2P_URL);
+    url.searchParams.set("fiat", "VES");
+    url.searchParams.set("asset", "USDT");
+    url.searchParams.set("tradeType", tradeType);
+    const raw = await fetchText(url.toString(), {
+      headers: { Accept: "application/json" },
+    });
+    return parseBinanceQuote(JSON.parse(raw), tradeType);
+  };
+
+  const [compra, venta] = await Promise.all([
+    fetchSide("BUY"),
+    fetchSide("SELL"),
+  ]);
+
+  return {
+    moneda: "USD",
+    fuente: "binance-p2p",
+    nombre: "Dólar Binance",
+    promedio: (compra + venta) / 2,
+    compra,
+    venta,
+    variacion: null,
+    variacionPorcentaje: null,
+    fechaActualizacion: new Date().toISOString(),
+    sourceUrl: "https://p2p.binance.com/",
+  };
 }
 
 async function loadBinanceQuote() {
@@ -320,6 +362,12 @@ async function loadBinanceQuote() {
     failures.push(...errors.map((item) => item.message));
   }
 
+  try {
+    return await fetchBinanceP2P();
+  } catch (error) {
+    failures.push(`Binance P2P: ${error.message}`);
+  }
+
   throw new Error(failures.join(" | ") || "No se pudo consultar Binance.");
 }
 
@@ -345,3 +393,4 @@ module.exports = async function handler(req, res) {
 module.exports.parsePage = parsePage;
 module.exports.parseApiPayload = parseApiPayload;
 module.exports.parseReaderPage = parseReaderPage;
+module.exports.parseBinanceQuote = parseBinanceQuote;
