@@ -17,7 +17,8 @@ Luego abre `http://localhost:4173`.
 - Viernes consulta la fecha actual.
 - Sábado y domingo consultan la fecha del lunes siguiente para dólar y euro BCV.
 - Si el lunes todavía no está publicado en la API, se mantiene visible el último valor BCV disponible y se marca como respaldo.
-- Binance consulta dos precios públicos P2P de `USDT/VES`: `BUY` para compra y `SELL` para venta.
+- Binance consulta el mercado P2P público de `USDT/VES` con `Todos los métodos de pago`, sin monto escrito y mostrando anuncios de comerciantes, igual que la vista de Binance.
+- La tarjeta toma el menor anuncio de compra (`BUY`) y el mayor anuncio de venta (`SELL`) entre los 20 anuncios de comerciantes consultados.
 - El monto principal mostrado es el promedio de ambos precios: `(compra + venta) / 2`.
 - Si Binance P2P no responde, se usa DolarApi como respaldo y se indica en pantalla.
 

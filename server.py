@@ -8,14 +8,13 @@ from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parent
 PORT = 4173
 BINANCE_P2P_URL = (
-    "https://www.binance.com/bapi/c2c/v1/public/c2c/agent/ad-list"
+    "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
 )
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -45,26 +44,43 @@ def parse_number(value: Any) -> float | None:
 
 
 def parse_binance_quote(payload: dict[str, Any], trade_type: str) -> float:
-    items = (payload.get("data") or {}).get("items")
+    items = payload.get("data")
+    if isinstance(items, dict):
+        items = items.get("items")
     if not payload.get("success") or not isinstance(items, list) or not items:
         raise ValueError(f"Binance P2P rechazó la consulta {trade_type}.")
 
-    prices = [parse_number(item.get("price")) for item in items]
+    prices = [
+        parse_number((item.get("adv") or {}).get("price") or item.get("price"))
+        for item in items
+    ]
     prices = [price for price in prices if price is not None]
     if not prices:
         raise ValueError(f"Binance P2P no devolvió precio para {trade_type}.")
     return min(prices) if trade_type == "BUY" else max(prices)
 
 
-def fetch_json(url: str) -> dict[str, Any]:
+def fetch_json(url: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    request_body = None
+    method = "GET"
+    if body is not None:
+        request_body = json.dumps(body).encode("utf-8")
+        method = "POST"
+
+    headers = {
+        "Accept": "application/json",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "User-Agent": USER_AGENT,
+    }
+    if request_body is not None:
+        headers["Content-Type"] = "application/json"
+
     request = Request(
         url,
-        headers={
-            "Accept": "application/json",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-            "User-Agent": USER_AGENT,
-        },
+        data=request_body,
+        headers=headers,
+        method=method,
     )
     with urlopen(request, timeout=REQUEST_TIMEOUT) as response:
         return json.loads(response.read().decode("utf-8", errors="replace"))
@@ -72,17 +88,21 @@ def fetch_json(url: str) -> dict[str, Any]:
 
 def fetch_binance_p2p() -> dict[str, Any]:
     def fetch_side(trade_type: str) -> float:
-        query = urlencode(
-            {
-                "fiat": "VES",
-                "asset": "USDT",
-                "tradeType": trade_type,
-                "limit": 20,
-                "order": 1,
-            }
-        )
         return parse_binance_quote(
-            fetch_json(f"{BINANCE_P2P_URL}?{query}"), trade_type
+            fetch_json(
+                BINANCE_P2P_URL,
+                {
+                    "asset": "USDT",
+                    "fiat": "VES",
+                    "merchantCheck": True,
+                    "page": 1,
+                    "payTypes": [],
+                    "publisherType": "merchant",
+                    "rows": 20,
+                    "tradeType": trade_type,
+                },
+            ),
+            trade_type,
         )
 
     compra = fetch_side("BUY")

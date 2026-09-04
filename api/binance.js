@@ -1,5 +1,5 @@
 const BINANCE_P2P_URL =
-  "https://www.binance.com/bapi/c2c/v1/public/c2c/agent/ad-list";
+  "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search";
 const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36";
 const REQUEST_TIMEOUT = 8000;
@@ -22,13 +22,15 @@ function parseNumber(value) {
 }
 
 function fetchBestAdPrice(payload, tradeType) {
-  const items = payload?.data?.items;
+  const items = Array.isArray(payload?.data)
+    ? payload.data
+    : payload?.data?.items;
   if (!payload?.success || !Array.isArray(items) || !items.length) {
     throw new Error(`Binance P2P rechazó la consulta ${tradeType}.`);
   }
 
   const prices = items
-    .map((item) => parseNumber(item?.price))
+    .map((item) => parseNumber(item?.adv?.price ?? item?.price))
     .filter((price) => price !== null);
   if (!prices.length) {
     throw new Error(`Binance P2P no devolvió precio para ${tradeType}.`);
@@ -40,18 +42,21 @@ function fetchBestAdPrice(payload, tradeType) {
   return price;
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
     const response = await fetch(url, {
+      method: options.method || "GET",
       headers: {
         Accept: "application/json",
         "Cache-Control": "no-cache",
         Pragma: "no-cache",
         "User-Agent": USER_AGENT,
+        ...(options.headers || {}),
       },
+      body: options.body,
       cache: "no-store",
       signal: controller.signal,
     });
@@ -68,13 +73,25 @@ async function fetchJson(url) {
 
 async function fetchBinanceP2P() {
   const fetchSide = async (tradeType) => {
-    const url = new URL(BINANCE_P2P_URL);
-    url.searchParams.set("fiat", "VES");
-    url.searchParams.set("asset", "USDT");
-    url.searchParams.set("tradeType", tradeType);
-    url.searchParams.set("limit", "20");
-    url.searchParams.set("order", "1");
-    return fetchBestAdPrice(await fetchJson(url.toString()), tradeType);
+    const body = JSON.stringify({
+      asset: "USDT",
+      fiat: "VES",
+      merchantCheck: true,
+      page: 1,
+      payTypes: [],
+      publisherType: "merchant",
+      rows: 20,
+      tradeType,
+    });
+
+    return fetchBestAdPrice(
+      await fetchJson(BINANCE_P2P_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      }),
+      tradeType,
+    );
   };
 
   const [compra, venta] = await Promise.all([
