@@ -19,7 +19,7 @@ const FALLBACK_QUOTES = {
   },
   parallel: {
     value: 968.78,
-    source: "binance",
+    source: "binance-p2p",
     label: "Dólar Binance",
     buy: 969.46,
     sell: 968.10,
@@ -366,19 +366,15 @@ function renderQuotes(quotes, plan) {
   renderQuoteCard(dom.usdCard, dom.usdValue, dom.usdUpdated, dom.usdNote, quotes.usd, plan);
   renderQuoteCard(dom.eurCard, dom.eurValue, dom.eurUpdated, dom.eurNote, quotes.eur, plan);
 
-  const parallelIsLive = ["binance", "binance-p2p"].includes(quotes.parallel.mode);
+  const parallelIsLive = quotes.parallel.mode === "binance-p2p";
   dom.parallelCard.classList.toggle("is-stale", !parallelIsLive);
-  dom.parallelSource.textContent = quotes.parallel.mode === "binance"
-    ? "ExchangeMonitor"
-    : quotes.parallel.mode === "binance-p2p"
-      ? "Binance P2P"
+  dom.parallelSource.textContent = quotes.parallel.mode === "binance-p2p"
+    ? "Binance P2P"
     : quotes.parallel.mode === "parallel-fallback"
       ? "DolarApi"
       : "Respaldo";
-  dom.parallelSource.href = quotes.parallel.mode === "binance"
-    ? "https://exchangemonitor.net/venezuela/dolar-binance"
-    : quotes.parallel.mode === "binance-p2p"
-      ? "https://p2p.binance.com/"
+  dom.parallelSource.href = quotes.parallel.mode === "binance-p2p"
+    ? "https://p2p.binance.com/"
       : "https://dolarapi.com/docs/venezuela/";
   dom.parallelValue.textContent = formatRate(quotes.parallel.value);
   dom.parallelBuy.textContent = formatRate(quotes.parallel.buy);
@@ -509,7 +505,7 @@ async function loadDashboard() {
     renderTrend([], quotes.usd.value);
   }
 
-  const binanceLive = ["binance", "binance-p2p"].includes(quotes.parallel.mode);
+  const binanceLive = quotes.parallel.mode === "binance-p2p";
   const fallbackLabels = failures.map((key) => key === "parallel" ? "Binance" : key === "eur" ? "euro BCV" : "dólar BCV");
   if (!binanceLive) fallbackLabels.push("Binance");
   const uniqueFallbackLabels = [...new Set(fallbackLabels)];
