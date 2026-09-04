@@ -21,7 +21,7 @@ Luego abre `http://localhost:4173`.
 - El monto principal mostrado es el promedio de ambos precios: `(compra + venta) / 2`.
 - Si Binance P2P no responde, se usa DolarApi como respaldo y se indica en pantalla.
 
-La app refresca al cargar, con el botón `Actualizar` y automáticamente cada 10 minutos.
+La app refresca al cargar, con el botón `Actualizar` y automáticamente cada 10 minutos. Cada consulta Binance lleva un identificador único y el endpoint responde sin caché, por lo que el botón solicita datos nuevos de inmediato.
 
 ## Publicar en Vercel
 

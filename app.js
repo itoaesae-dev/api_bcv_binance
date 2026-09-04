@@ -258,7 +258,7 @@ async function fetchOfficial(key, plan, signal) {
 
 async function fetchBinance(plan, signal) {
   try {
-    const raw = await fetchLocalJson("/api/binance", signal);
+    const raw = await fetchLocalJson(`/api/binance?refresh=${Date.now()}`, signal);
     const mode = raw.fuente === "binance-p2p" ? "binance-p2p" : "binance";
     return normalizeQuote(raw, "parallel", plan, mode);
   } catch (error) {
