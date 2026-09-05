@@ -14,8 +14,8 @@ Luego abre `http://localhost:4173`.
 
 ## Regla de fechas
 
-- Viernes consulta la fecha actual.
-- Sábado y domingo consultan la fecha del lunes siguiente para dólar y euro BCV.
+- Viernes consulta la fecha actual hasta las 6:00 p. m. (hora de Caracas).
+- Desde las 6:00 p. m. del viernes, y durante sábado y domingo, dólar y euro BCV consultan la fecha del lunes siguiente.
 - Si el lunes todavía no está publicado en la API, se mantiene visible el último valor BCV disponible y se marca como respaldo.
 - Binance consulta el mercado P2P público de `USDT/VES` con `Todos los métodos de pago`, sin monto escrito y mostrando anuncios de comerciantes, igual que la vista de Binance.
 - La tarjeta toma el menor anuncio de compra (`BUY`) y el mayor anuncio de venta (`SELL`) entre los 20 anuncios de comerciantes consultados.

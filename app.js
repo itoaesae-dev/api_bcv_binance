@@ -1,5 +1,8 @@
 const API_BASE = "https://ve.dolarapi.com/v1";
 const TIME_ZONE = "America/Caracas";
+// El BCV suele publicar el valor del lunes el viernes al final de la tarde.
+// Si el banco cambia la hora de actualización, basta con cambiar este valor a 17.
+const FRIDAY_MONDAY_SWITCH_HOUR = 18;
 const CACHE_KEY = "valor-local-cache-v1";
 const REFRESH_INTERVAL = 10 * 60 * 1000;
 const REQUEST_TIMEOUT = 12000;
@@ -68,18 +71,22 @@ function getCaracasDateParts(date = new Date()) {
     month: "2-digit",
     day: "2-digit",
     weekday: "short",
+    hour: "2-digit",
+    hourCycle: "h23",
   }).formatToParts(date);
 
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   const year = Number(values.year);
   const month = Number(values.month);
   const day = Number(values.day);
+  const hour = Number(values.hour);
   const dateOnly = new Date(Date.UTC(year, month - 1, day));
 
   return {
     year,
     month,
     day,
+    hour,
     weekday: dateOnly.getUTCDay(),
     dateOnly,
   };
@@ -94,14 +101,23 @@ function addDays(date, days) {
 function getDatePlan(now = new Date()) {
   const today = getCaracasDateParts(now);
   let effectiveDate = today.dateOnly;
+  const isWeekend = today.weekday === 0 || today.weekday === 6;
+  const isFridayAfterBankUpdate = today.weekday === 5
+    && today.hour >= FRIDAY_MONDAY_SWITCH_HOUR;
+  const usesMondayDate = isWeekend || isFridayAfterBankUpdate;
 
+  if (today.weekday === 5 && isFridayAfterBankUpdate) {
+    effectiveDate = addDays(today.dateOnly, 3);
+  }
   if (today.weekday === 6) effectiveDate = addDays(today.dateOnly, 2);
   if (today.weekday === 0) effectiveDate = addDays(today.dateOnly, 1);
 
   return {
     today,
     effectiveDate,
-    isWeekend: today.weekday === 6 || today.weekday === 0,
+    isWeekend,
+    isFridayAfterBankUpdate,
+    usesMondayDate,
   };
 }
 
@@ -166,6 +182,12 @@ function formatTime(value = new Date()) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(value);
+}
+
+function formatHourLabel(hour) {
+  const suffix = hour >= 12 ? "p. m." : "a. m.";
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:00 ${suffix}`;
 }
 
 function firstFinite(candidates) {
@@ -235,7 +257,7 @@ async function fetchLocalJson(path, signal) {
 async function fetchOfficial(key, plan, signal) {
   const livePath = key === "eur" ? "/euros/oficial" : "/dolares/oficial";
 
-  if (!plan.isWeekend) {
+  if (!plan.usesMondayDate) {
     const raw = await fetchJson(livePath, signal);
     return normalizeQuote(raw, key, plan, "live");
   }
@@ -248,9 +270,9 @@ async function fetchOfficial(key, plan, signal) {
     const raw = await fetchJson(historicalPath, signal);
     return normalizeQuote(raw, key, plan, "monday");
   } catch (error) {
-    // El lunes futuro aún puede no existir durante el fin de semana.
+    // El lunes futuro aún puede no existir el viernes por la tarde o durante el fin de semana.
     const raw = await fetchJson(livePath, signal);
-    return normalizeQuote(raw, key, plan, "weekend-fallback");
+    return normalizeQuote(raw, key, plan, "monday-fallback");
   }
 }
 
@@ -326,14 +348,15 @@ function setLoadingState(isLoading) {
 function renderDatePlan(plan) {
   const todayLabel = formatLongDate(plan.today.dateOnly);
   const effectiveLabel = formatLongDate(plan.effectiveDate);
+  const fridaySwitchLabel = formatHourLabel(FRIDAY_MONDAY_SWITCH_HOUR);
 
   dom.dateBriefTitle.textContent = capitalize(todayLabel);
-  dom.effectiveDateLabel.textContent = plan.isWeekend
+  dom.effectiveDateLabel.textContent = plan.usesMondayDate
     ? `Lunes · ${capitalize(effectiveLabel)}`
     : capitalize(effectiveLabel);
-  dom.dateRuleNote.textContent = plan.isWeekend
+  dom.dateRuleNote.textContent = plan.usesMondayDate
     ? "Dólar y euro BCV buscan el monto del lunes siguiente. Si todavía no se publica, se muestra el último dato disponible."
-    : "Viernes cuenta como viernes. Solo sábado y domingo saltan al lunes siguiente.";
+    : `Viernes usa su propio monto hasta las ${fridaySwitchLabel}; después salta al lunes siguiente. Sábado y domingo también toman el lunes.`;
 }
 
 function capitalize(value) {
@@ -347,7 +370,7 @@ function renderQuoteCard(card, valueNode, updatedNode, noteNode, quote, plan, ba
 
   if (quote.mode === "monday") {
     noteNode.textContent = "Monto del lunes";
-  } else if (quote.mode === "weekend-fallback") {
+  } else if (quote.mode === "monday-fallback") {
     noteNode.textContent = "Último BCV disponible";
   } else if (quote.mode === "local-fallback") {
     noteNode.textContent = "Respaldo local";
